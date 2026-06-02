@@ -13,16 +13,24 @@ Supported MODEL prefixes (set in .env):
 
 import json
 import os
+import re
 import sys
 import time
+
+os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
+os.environ.setdefault("LITELLM_LOG", "WARNING")
 
 from dotenv import load_dotenv
 from litellm import completion
 import litellm
 
+litellm.suppress_debug_info = True
+litellm.set_verbose = False
+
 load_dotenv()
 
-_MODEL = os.getenv("MODEL", "openai/gpt-4o-mini")
+_DEFAULT_GROQ_MODEL = "groq/llama-3.3-70b-versatile"
+_MODEL = os.getenv("MODEL", _DEFAULT_GROQ_MODEL)
 
 # Phrases that indicate the LLM violated the anti-rewrite rule.
 _REWRITE_MARKERS = ("here is a rewritten", "improved version:")
@@ -109,9 +117,23 @@ def _check_no_rewrite(data: object, path: str = "") -> None:
                 )
 
 
+def _rate_limit_sleep_seconds(exc: Exception, attempt: int) -> int:
+    """Choose a rate-limit backoff, using provider guidance when present."""
+    msg = str(exc)
+    match = re.search(r"try again in ([0-9]+(?:\.[0-9]+)?)s", msg, re.IGNORECASE)
+    if match:
+        return max(1, min(60, int(float(match.group(1))) + 1))
+    return min(60, 5 * (2 ** attempt))
+
+
 def _raise_auth_error(model: str, exc: Exception) -> None:
     """Raise a RuntimeError naming the missing env var for the chosen route."""
-    var = "ANTHROPIC_API_KEY" if model.startswith("anthropic/") else "OPENAI_API_KEY"
+    if model.startswith("anthropic/"):
+        var = "ANTHROPIC_API_KEY"
+    elif model.startswith("groq/"):
+        var = "GROQ_API_KEY"
+    else:
+        var = "OPENAI_API_KEY"
     raise RuntimeError(
         f"{var} is invalid or missing for route '{model}'. "
         "Check your .env file."
@@ -143,18 +165,21 @@ def ask_json(
         {"role": "user", "content": user},
     ]
 
-    for attempt in range(3):
+    max_attempts = 5
+    for attempt in range(max_attempts):
         try:
             response = completion(**_call_kwargs(model, messages, temperature, max_tokens))
 
-        except litellm.RateLimitError:
+        except litellm.RateLimitError as exc:
             # Rate limit hit — back off and retry (max 2 sleeps before giving up).
-            if attempt < 2:
-                sleep_secs = 2 ** attempt   # 1s, then 2s
-                print(f"Rate limit; retrying in {sleep_secs}s…", file=sys.stderr)
+            if attempt < max_attempts - 1:
+                sleep_secs = _rate_limit_sleep_seconds(exc, attempt)
+                print(f"Rate limit; retrying in {sleep_secs}s...", file=sys.stderr)
                 time.sleep(sleep_secs)
                 continue
-            raise RuntimeError("Rate limit exceeded after 3 attempts. Try again later.")
+            raise RuntimeError(
+                f"Rate limit exceeded after {max_attempts} attempts. Try again later."
+            ) from exc
 
         except litellm.AuthenticationError as exc:
             # Auth failure — name the missing env var so the student can fix it.
@@ -178,7 +203,7 @@ def ask_json(
                     f"Ollama model '{model_name}' not found. "
                     f"Run: ollama pull {model_name}"
                 ) from exc
-            raise
+            raise RuntimeError(f"LLM API error for route '{model}': {exc}") from exc
 
         # ---- response received ----
 
@@ -256,17 +281,18 @@ def ask_text(
     else:
         kwargs["max_tokens"] = max_tokens
 
-    for attempt in range(3):
+    max_attempts = 5
+    for attempt in range(max_attempts):
         try:
             response = completion(**kwargs)
-        except litellm.RateLimitError:
+        except litellm.RateLimitError as exc:
             # Back off and retry on rate limit.
-            if attempt < 2:
-                sleep_secs = 2 ** attempt
-                print(f"Rate limit; retrying in {sleep_secs}s…", file=sys.stderr)
+            if attempt < max_attempts - 1:
+                sleep_secs = _rate_limit_sleep_seconds(exc, attempt)
+                print(f"Rate limit; retrying in {sleep_secs}s...", file=sys.stderr)
                 time.sleep(sleep_secs)
                 continue
-            raise RuntimeError("Rate limit exceeded after 3 attempts.")
+            raise RuntimeError(f"Rate limit exceeded after {max_attempts} attempts.") from exc
         except litellm.AuthenticationError as exc:
             _raise_auth_error(model, exc)
         except litellm.APIConnectionError as exc:
@@ -284,8 +310,11 @@ def ask_text(
                     f"Ollama model '{model_name}' not found. "
                     f"Run: ollama pull {model_name}"
                 ) from exc
-            raise
+            raise RuntimeError(f"LLM API error for route '{model}': {exc}") from exc
 
-        return response.choices[0].message.content or ""
+        content = response.choices[0].message.content or ""
+        if not content.strip():
+            raise RuntimeError("LLM returned an empty response.")
+        return content
 
     raise RuntimeError("ask_text: all retry attempts exhausted")

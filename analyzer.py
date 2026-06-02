@@ -1,18 +1,12 @@
 """
-analyzer.py — the 8 analysis functions and the pure-Python score calculator.
+analyzer.py - LLM analysis stages and pure-Python score aggregation.
 
-Task 4 of the Day 4 lab (Track A).
-Study material references:
-  §4 The Multi-Stage Pipeline
-  §7.2 Weighted Aggregation
-
-Each of the 8 analysis functions calls ask_json() or ask_text() exactly once.
-compute_overall_score() makes NO LLM call — it is pure Python arithmetic.
-
-Imports you will need (already written for you):
+Each lab analysis function wraps exactly one LLM call. compute_overall_score()
+does not call the LLM; it only combines sub-scores with fixed weights.
 """
 
 import json
+from typing import Any
 
 from llm import ask_json, ask_text
 from prompts import (
@@ -24,73 +18,51 @@ from prompts import (
     STRUCTURE_AUDIT_PROMPT,
     DEGREE_ALIGNMENT_PROMPT,
     OVERALL_SUMMARY_PROMPT,
+    COVER_LETTER_PROMPT,
+    COVER_LETTER_REVISION_PROMPT,
 )
 
 
+def _dump(data: Any) -> str:
+    """Serialise pipeline data for LLM user messages."""
+    return json.dumps(data, indent=2, ensure_ascii=False)
+
+
 # ---------------------------------------------------------------------------
-# Extraction functions (§6.1)
+# Extraction functions
 # ---------------------------------------------------------------------------
 
 def extract_resume_profile(resume_text: str) -> dict:
-    """
-    Convert plain résumé text to a structured candidate profile dict.
-
-    Calls: ask_json(RESUME_PROFILE_PROMPT, user, max_tokens=2000)
-    User message format: "RÉSUMÉ TEXT:\\n\\n{resume_text}"
-
-    Returns:
-        Candidate profile dict matching the schema in RESUME_PROFILE_PROMPT.
-    """
-    # TODO: implement this function
-    raise NotImplementedError
+    """Convert plain resume text to a structured candidate profile."""
+    user = f"RESUME TEXT:\n\n{resume_text}"
+    return ask_json(RESUME_PROFILE_PROMPT, user, temperature=0.0, max_tokens=2500)
 
 
 def extract_jd_profile(jd_text: str) -> dict:
-    """
-    Convert plain job-description text to a structured JD profile dict.
-
-    Calls: ask_json(JD_PROFILE_PROMPT, user, max_tokens=1500)
-    User message format: "JOB DESCRIPTION TEXT:\\n\\n{jd_text}"
-
-    Returns:
-        JD profile dict matching the schema in JD_PROFILE_PROMPT.
-    """
-    # TODO: implement this function
-    raise NotImplementedError
+    """Convert plain job-description text to a structured JD profile."""
+    user = f"JOB DESCRIPTION TEXT:\n\n{jd_text}"
+    return ask_json(JD_PROFILE_PROMPT, user, temperature=0.0, max_tokens=2000)
 
 
 # ---------------------------------------------------------------------------
-# Evaluation functions (§6.2)
+# Evaluation functions
 # ---------------------------------------------------------------------------
 
 def analyse_keyword_match(resume_profile: dict, jd_profile: dict) -> dict:
-    """
-    Compare résumé keywords against JD requirements.
-
-    Calls: ask_json(KEYWORD_MATCH_PROMPT, user, max_tokens=3000)
-    User message format:
-        "RÉSUMÉ PROFILE:\\n{json_dump}\\n\\nJD PROFILE:\\n{json_dump}"
-    Use json.dumps(profile, indent=2) to serialise each profile.
-
-    Returns:
-        Keyword match dict with keys: present, missing, keyword_match_score.
-    """
-    # TODO: implement this function
-    raise NotImplementedError
+    """Compare resume keywords against JD requirements."""
+    user = (
+        f"RESUME PROFILE:\n{_dump(resume_profile)}\n\n"
+        f"JD PROFILE:\n{_dump(jd_profile)}"
+    )
+    return ask_json(KEYWORD_MATCH_PROMPT, user, temperature=0.2, max_tokens=3000)
 
 
 def analyse_bullets(resume_profile: dict) -> dict:
-    """
-    Score every bullet in the résumé against the Action→Technology→Impact rubric.
-
-    Calls: ask_json(BULLET_QUALITY_PROMPT, user, max_tokens=3000)
-    User message format: "RÉSUMÉ PROFILE:\\n{json_dump}"
-
-    Returns:
-        Bullet quality dict with keys: bullets, bullet_quality_avg.
-    """
-    # TODO: implement this function
-    raise NotImplementedError
+    """Score resume bullets against the Action, Technology, Impact rubric."""
+    user = f"RESUME PROFILE:\n{_dump(resume_profile)}"
+    result = ask_json(BULLET_QUALITY_PROMPT, user, temperature=0.2, max_tokens=3000)
+    _normalise_bullet_score(result)
+    return result
 
 
 def analyse_jargon(
@@ -98,102 +70,129 @@ def analyse_jargon(
     degree_program: str,
     jd_profile: dict,
 ) -> dict:
-    """
-    Detect game-dev jargon in résumé bullets and flag suggested translations.
-
-    Calls: ask_json(JARGON_AUDIT_PROMPT, user, max_tokens=1500)
-    User message format:
-        "DEGREE PROGRAM: {degree_program}\\n\\n"
-        "RÉSUMÉ PROFILE:\\n{json_dump}\\n\\n"
-        "JD PROFILE:\\n{json_dump}"
-
-    Args:
-        resume_profile: Output of extract_resume_profile().
-        degree_program: One of "RTIS", "IMGD", "UXGD", "BFA".
-        jd_profile: Output of extract_jd_profile().
-
-    Returns:
-        Jargon audit dict with keys: flags, jargon_score.
-    """
-    # TODO: implement this function
-    raise NotImplementedError
+    """Detect game-dev jargon and suggest diagnostic translations."""
+    user = (
+        f"DEGREE PROGRAM: {degree_program}\n\n"
+        f"RESUME PROFILE:\n{_dump(resume_profile)}\n\n"
+        f"JD PROFILE:\n{_dump(jd_profile)}"
+    )
+    result = ask_json(JARGON_AUDIT_PROMPT, user, temperature=0.2, max_tokens=1800)
+    _normalise_jargon_score(result)
+    return result
 
 
 def analyse_structure(resume_text: str) -> dict:
-    """
-    Audit Three-Thirds layout compliance and ATS formatting.
-
-    Calls: ask_json(STRUCTURE_AUDIT_PROMPT, user, temperature=0.0, max_tokens=1500)
-    User message format: "RÉSUMÉ TEXT:\\n\\n{resume_text}"
-
-    Returns:
-        Structure audit dict with keys: three_thirds, ats_red_flags, structure_score, etc.
-    """
-    # TODO: implement this function
-    raise NotImplementedError
+    """Audit resume structure and ATS-friendly formatting."""
+    user = f"RESUME TEXT:\n\n{resume_text}"
+    return ask_json(STRUCTURE_AUDIT_PROMPT, user, temperature=0.0, max_tokens=1800)
 
 
 def analyse_degree_alignment(jd_profile: dict, degree_program: str) -> dict:
-    """
-    Assess how well the JD's job title fits the student's degree programme.
-
-    Calls: ask_json(DEGREE_ALIGNMENT_PROMPT, user, max_tokens=600)
-    User message format:
-        "DEGREE PROGRAM: {degree_program}\\n\\nJD PROFILE:\\n{json_dump}"
-
-    Args:
-        jd_profile: Output of extract_jd_profile().
-        degree_program: One of "RTIS", "IMGD", "UXGD", "BFA".
-
-    Returns:
-        Degree alignment dict with keys: degree_alignment_score, fit_commentary, etc.
-    """
-    # TODO: implement this function
-    raise NotImplementedError
+    """Assess whether the JD title aligns with the student's degree programme."""
+    user = f"DEGREE PROGRAM: {degree_program}\n\nJD PROFILE:\n{_dump(jd_profile)}"
+    return ask_json(DEGREE_ALIGNMENT_PROMPT, user, temperature=0.2, max_tokens=900)
 
 
 def summarise_overall(report: dict) -> str:
-    """
-    Generate a 3-bullet plain Markdown executive summary of the full report.
+    """Generate a three-bullet executive summary for the analysis report."""
+    summary_input = {
+        "overall_score": report.get("overall_score", 0),
+        "passes_ats_threshold": report.get("passes_ats_threshold", False),
+        "keyword_match": report.get("keyword_match", {}),
+        "bullets": report.get("bullets", {}),
+        "jargon": report.get("jargon", {}),
+        "structure": report.get("structure", {}),
+        "degree_alignment": report.get("degree_alignment", {}),
+    }
+    user = f"ANALYSIS REPORT:\n{_dump(summary_input)}"
+    return ask_text(OVERALL_SUMMARY_PROMPT, user, temperature=0.3, max_tokens=400).strip()
 
-    NOTE: uses ask_text(), not ask_json() — returns a plain string, not a dict.
 
-    Calls: ask_text(OVERALL_SUMMARY_PROMPT, user, max_tokens=400)
-    User message format: "ANALYSIS REPORT:\\n{json_dump}"
+def generate_cover_letter(report: dict) -> str:
+    """Generate a tailored cover letter draft from verified analysis data."""
+    cover_input = {
+        "resume_profile": report.get("resume_profile", {}),
+        "jd_profile": report.get("jd_profile", {}),
+        "overall_score": report.get("overall_score", 0),
+        "passes_ats_threshold": report.get("passes_ats_threshold", False),
+        "keyword_match": report.get("keyword_match", {}),
+        "degree_alignment": report.get("degree_alignment", {}),
+    }
+    user = f"APPLICATION CONTEXT:\n{_dump(cover_input)}"
+    return ask_text(COVER_LETTER_PROMPT, user, temperature=0.4, max_tokens=1200).strip()
 
-    Only send the fields the summary needs — omit the raw résumé text to save tokens.
-    Keys to include: overall_score, passes_ats_threshold, keyword_match, bullets,
-    jargon, structure, degree_alignment.
 
-    Returns:
-        Plain Markdown string (3 bullet points).
-    """
-    # TODO: implement this function
-    # Hint: build a summary_input dict with only the fields listed above,
-    # then call ask_text(OVERALL_SUMMARY_PROMPT, f"ANALYSIS REPORT:\n{json.dumps(summary_input, indent=2)}", max_tokens=400)
-    raise NotImplementedError
+def revise_cover_letter(report: dict, current_draft: str, revision_request: str) -> str:
+    """Revise a cover letter draft using a factual follow-up request."""
+    revision_input = {
+        "resume_profile": report.get("resume_profile", {}),
+        "jd_profile": report.get("jd_profile", {}),
+        "analysis": {
+            "keyword_match": report.get("keyword_match", {}),
+            "degree_alignment": report.get("degree_alignment", {}),
+        },
+        "current_draft": current_draft,
+        "revision_request": revision_request,
+    }
+    user = f"REVISION CONTEXT:\n{_dump(revision_input)}"
+    return ask_text(COVER_LETTER_REVISION_PROMPT, user, temperature=0.4, max_tokens=1200).strip()
 
 
 # ---------------------------------------------------------------------------
-# Score aggregation (§7.2) — NO LLM call
+# Score aggregation - no LLM call
 # ---------------------------------------------------------------------------
+
+def _score(value: object) -> float:
+    """Coerce a sub-score to a bounded float."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, min(100.0, number))
+
+
+def _normalise_bullet_score(result: dict) -> None:
+    """Recompute bullet_quality_avg from returned bullet levels."""
+    levels = {"L1_OK": 1, "L2_BETTER": 2, "L3_BEST": 3}
+    bullets = result.get("bullets", [])
+    if not isinstance(bullets, list) or not bullets:
+        result["bullet_quality_avg"] = 0
+        return
+
+    total = 0
+    for bullet in bullets:
+        if isinstance(bullet, dict):
+            total += levels.get(str(bullet.get("level", "")), 0)
+    result["bullet_quality_avg"] = int(round(100 * total / (3 * len(bullets))))
+
+
+def _normalise_jargon_score(result: dict) -> None:
+    """Recompute jargon_score from returned flag severities."""
+    flags = result.get("flags", [])
+    if not isinstance(flags, list):
+        result["flags"] = []
+        result["jargon_score"] = 100
+        return
+
+    counts = {"high": 0, "medium": 0, "low": 0}
+    for flag in flags:
+        if isinstance(flag, dict):
+            severity = str(flag.get("severity", "")).lower()
+            if severity in counts:
+                counts[severity] += 1
+    result["jargon_score"] = max(
+        0,
+        100 - 10 * counts["high"] - 5 * counts["medium"] - 2 * counts["low"],
+    )
+
 
 def compute_overall_score(report: dict) -> int:
-    """
-    Compute the weighted composite score from sub-scores already in report.
-
-    This function makes NO LLM call. It is pure Python arithmetic.
-
-    Weights:
-        keyword_match_score    40%  (report["keyword_match"]["keyword_match_score"])
-        bullet_quality_avg     25%  (report["bullets"]["bullet_quality_avg"])
-        structure_score        15%  (report["structure"]["structure_score"])
-        jargon_score           10%  (report["jargon"]["jargon_score"])
-        degree_alignment_score 10%  (report["degree_alignment"]["degree_alignment_score"])
-
-    Returns:
-        int — weighted average, rounded to the nearest whole number.
-    """
-    # TODO: implement this function
-    # Hint: read each sub-score with .get("field", 0) to handle missing data safely.
-    raise NotImplementedError
+    """Compute the fixed weighted composite score from report sub-scores."""
+    total = (
+        _score(report.get("keyword_match", {}).get("keyword_match_score")) * 0.40
+        + _score(report.get("bullets", {}).get("bullet_quality_avg")) * 0.25
+        + _score(report.get("structure", {}).get("structure_score")) * 0.15
+        + _score(report.get("jargon", {}).get("jargon_score")) * 0.10
+        + _score(report.get("degree_alignment", {}).get("degree_alignment_score")) * 0.10
+    )
+    return int(round(total))

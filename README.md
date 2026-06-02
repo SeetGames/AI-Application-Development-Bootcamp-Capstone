@@ -1,59 +1,93 @@
-# Day 4 Resume Analyzer — Track A Starter
+# Resume and Cover Letter Assistant
 
-> **Track A** — you write the Python. Start here if you're comfortable with Python classes, lists, and `try/except`.
+## 1. Project Title and Description
 
-## Quick setup
+Resume and Cover Letter Assistant is a Python CLI app for students and early-career applicants. It compares a PDF resume against a plain-text job description, produces an ATS-style compatibility report, and can generate a tailored cover letter draft from verified resume facts.
 
-```bash
-# 1. Create and activate a virtual environment
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
+## 2. Problem Statement
 
-# 2. Install dependencies
-pip install -r requirements.txt
+Applicants often miss job-specific keywords or use project language that does not translate clearly to recruiters. This tool gives structured feedback on resume fit before submission and helps draft a cover letter that stays grounded in the applicant's actual experience.
 
-# 3. Copy .env.example and fill in your API key
-cp .env.example .env
-# Edit .env — set OPENAI_API_KEY (or your preferred provider)
+## 3. Technology Stack
+
+- Python 3.10+
+- Groq API through LiteLLM
+- `python-dotenv` for `.env` secrets
+- `pypdf` for PDF text extraction
+- Markdown and JSON output files
+
+Default model: `groq/llama-3.3-70b-versatile`.
+
+## 4. Setup Instructions
+
+1. Clone or download this repository.
+2. Create and activate a virtual environment:
+
+   ```powershell
+   python -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   ```
+
+3. Install dependencies:
+
+   ```powershell
+   pip install -r requirements.txt
+   ```
+
+4. Copy `.env.example` to `.env` and add your Groq key:
+
+   ```powershell
+   Copy-Item .env.example .env
+   ```
+
+5. Run the analyzer:
+
+   ```powershell
+   python main.py inputs/strong_resume.pdf inputs/job_rtis_systems_engineer.txt RTIS
+   ```
+
+6. Run the analyzer with cover-letter generation:
+
+   ```powershell
+   python main.py inputs/strong_resume.pdf inputs/job_rtis_systems_engineer.txt RTIS --cover-letter
+   ```
+
+Reports are written to `outputs/` as timestamped `.json`, `.md`, and optional cover-letter `.txt` files.
+
+## 5. Usage Examples
+
+Example 1: strong resume against a relevant systems job.
+
+```powershell
+python main.py inputs/strong_resume.pdf inputs/job_rtis_systems_engineer.txt RTIS --cover-letter
 ```
 
-## Run the analyzer
+Expected output includes a score, a PASS/FAIL verdict, paths to the JSON and Markdown reports, and a cover-letter text file.
 
-```bash
-python main.py \
-  --resume path/to/your_resume.pdf \
-  --jd     inputs/job_rtis_systems_engineer.txt \
-  --degree RTIS
+Example 2: weak resume against an unrelated marketing job.
+
+```powershell
+python main.py inputs/weak_resume.pdf inputs/job_unrelated.txt RTIS
 ```
 
-Reports are saved to `outputs/` as both `.json` and `.md`.
+Expected output is a lower score with missing keyword diagnostics and a Markdown report showing which scoring components pulled the total down.
 
-## File guide
+Optional follow-up cover-letter revision mode:
 
-| File | Your job |
-|---|---|
-| `parse.py` | ✏️ **Write this** — Task 1 |
-| `prompts.py` | ✏️ **Write this** — Task 3 |
-| `analyzer.py` | ✏️ **Write this** — Task 4 |
-| `main.py` | ✏️ **Write this** — Task 5 |
-| `llm.py` | ✅ Pre-provided — read it, don't edit |
-| `report.py` | ✅ Pre-provided — read it, don't edit |
-
-## Check your progress
-
-```bash
-# Test parse.py
-python -c "from parse import read_jd_text; print(read_jd_text('inputs/job_rtis_systems_engineer.txt')[:200])"
-
-# Test prompts.py
-python -c "from prompts import RESUME_PROFILE_PROMPT; print(RESUME_PROFILE_PROMPT[:100])"
-
-# Test analyzer.py
-python -c "from analyzer import extract_jd_profile; from parse import read_jd_text; print(extract_jd_profile(read_jd_text('inputs/job_rtis_systems_engineer.txt')))"
+```powershell
+python main.py inputs/strong_resume.pdf inputs/job_rtis_systems_engineer.txt RTIS --interactive
 ```
 
-## Stretch goals
+After the first draft is generated, type revision requests such as "make it shorter" or "make the tone more formal". Press Enter on a blank line to finish.
 
-- Route to a local Ollama model by changing `MODEL=` in `.env` — no code changes needed.
-- Add a thin Streamlit UI (`pip install streamlit`) that accepts file uploads.
-- Add a second JD comparison run with `inputs/job_unrelated.txt` and compare scores.
+## 6. Known Limitations
+
+- The parser only supports text-based PDFs. Scanned or image-only resumes will fail validation.
+- The score is a heuristic based on the bootcamp rubric and a 60% ATS threshold; real employers may use different filters.
+- Cover letters are grounded in extracted resume facts, so extraction mistakes can affect the draft.
+
+## 7. Future Improvements
+
+- Add a Streamlit interface for uploading a resume and job description without using the terminal.
+- Add automated regression tests with mocked LLM responses for the full pipeline.
+- Add OCR support for scanned PDFs.

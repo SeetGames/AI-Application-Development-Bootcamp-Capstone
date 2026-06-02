@@ -49,8 +49,37 @@ def read_resume_pdf(path: str) -> str:
     Raises:
         ValueError: If the file is not found, cannot be opened, or is too short.
     """
-    # TODO: implement this function
-    raise NotImplementedError
+    try:
+        reader = PdfReader(path)
+    except FileNotFoundError as exc:
+        raise ValueError(f"Resume file not found: {path}") from exc
+    except Exception as exc:
+        raise ValueError(f"Could not open resume PDF '{path}': {exc}") from exc
+
+    if len(reader.pages) > 2:
+        print(
+            f"WARNING: resume has {len(reader.pages)} pages; ATS resumes are usually 1 page.",
+            file=sys.stderr,
+        )
+
+    page_texts = [page.extract_text() or "" for page in reader.pages]
+    text = "\n\n".join(page_texts)
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
+
+    if len(text) < _MIN_RESUME_CHARS:
+        raise ValueError(
+            f"Resume text is too short ({len(text)} chars). "
+            "The PDF may be image-only or scanned."
+        )
+
+    if len(text) > _MAX_RESUME_CHARS:
+        print(
+            f"WARNING: resume text is {len(text)} chars; truncating to {_MAX_RESUME_CHARS}.",
+            file=sys.stderr,
+        )
+        text = text[:_MAX_RESUME_CHARS]
+
+    return text
 
 
 def read_jd_text(path: str) -> str:
@@ -74,5 +103,18 @@ def read_jd_text(path: str) -> str:
     Raises:
         ValueError: If the file is not found or the content is too short.
     """
-    # TODO: implement this function
-    raise NotImplementedError
+    try:
+        with open(path, encoding="utf-8") as file:
+            text = file.read().strip()
+    except FileNotFoundError as exc:
+        raise ValueError(f"Job description file not found: {path}") from exc
+    except Exception as exc:
+        raise ValueError(f"Could not read job description '{path}': {exc}") from exc
+
+    if len(text) < _MIN_JD_CHARS:
+        raise ValueError(
+            f"Job description text is too short ({len(text)} chars). "
+            "Provide a complete plain-text job description."
+        )
+
+    return text
