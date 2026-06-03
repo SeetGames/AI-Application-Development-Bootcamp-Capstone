@@ -14,6 +14,7 @@ Applicants often miss job-specific keywords or use project language that does no
 - Groq API through LiteLLM
 - `python-dotenv` for `.env` secrets
 - `pypdf` for PDF text extraction
+- Streamlit for the web UI
 - Markdown and JSON output files
 
 Default model: `groq/llama-3.3-70b-versatile`.
@@ -40,13 +41,19 @@ Default model: `groq/llama-3.3-70b-versatile`.
    Copy-Item .env.example .env
    ```
 
-5. Run the analyzer:
+5. Run the Streamlit UI:
+
+   ```powershell
+   streamlit run streamlit_app.py
+   ```
+
+6. Or run the CLI analyzer:
 
    ```powershell
    python main.py inputs/strong_resume.pdf inputs/job_rtis_systems_engineer.txt RTIS
    ```
 
-6. Run the analyzer with cover-letter generation:
+7. Run the CLI analyzer with cover-letter generation:
 
    ```powershell
    python main.py inputs/strong_resume.pdf inputs/job_rtis_systems_engineer.txt RTIS --cover-letter
@@ -80,6 +87,14 @@ python main.py inputs/strong_resume.pdf inputs/job_rtis_systems_engineer.txt RTI
 
 After the first draft is generated, type revision requests such as "make it shorter" or "make the tone more formal". Press Enter on a blank line to finish.
 
+Streamlit UI:
+
+```powershell
+streamlit run streamlit_app.py
+```
+
+In the browser UI, upload a PDF resume, paste or upload a text job description, select a degree code, and run the analysis. The app displays score tabs and provides download buttons for JSON, Markdown, and cover-letter outputs.
+
 ## 6. Known Limitations
 
 - The parser only supports text-based PDFs. Scanned or image-only resumes will fail validation.
@@ -88,6 +103,6 @@ After the first draft is generated, type revision requests such as "make it shor
 
 ## 7. Future Improvements
 
-- Add a Streamlit interface for uploading a resume and job description without using the terminal.
 - Add automated regression tests with mocked LLM responses for the full pipeline.
 - Add OCR support for scanned PDFs.
+- Add user accounts and saved analysis history.
