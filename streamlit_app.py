@@ -88,66 +88,40 @@ def _inject_css() -> None:
             border-color: #3b82f6 !important;
             box-shadow: 0 0 0 1px #3b82f6 !important;
         }
-        div[data-testid="stPopover"] button {
-            min-height: 34px;
-            width: 38px;
-            border-radius: 999px;
-            border-color: #3b82f6;
-            color: #dbeafe;
-            font-size: 1.2rem;
-            padding: 0;
-        }
-        div[data-testid="stPopover"] button:hover {
-            background: #1e3a8a;
-            border-color: #60a5fa;
-            color: #ffffff;
-        }
-        section[data-testid="stPopoverBody"] {
-            border: 1px solid #1f2937;
-            border-radius: 14px;
-            background: #101318;
-            min-width: 520px;
-            padding: 16px;
-        }
-        section[data-testid="stPopoverBody"] div[data-testid="stFileUploaderDropzone"] {
-            min-height: 210px;
+        div[data-testid="stFileUploaderDropzone"] {
+            min-height: 112px;
             border: 2px dashed #64748b;
-            border-radius: 14px;
+            border-radius: 8px;
             background: #111827;
             display: flex;
             align-items: center;
             justify-content: center;
         }
-        section[data-testid="stPopoverBody"] div[data-testid="stFileUploaderDropzone"]:hover,
-        section[data-testid="stPopoverBody"] div[data-testid="stFileUploaderDropzone"]:focus-within {
+        div[data-testid="stFileUploaderDropzone"]:hover,
+        div[data-testid="stFileUploaderDropzone"]:focus-within {
             border-color: #60a5fa;
             box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
             background: #0f1f3a;
         }
-        section[data-testid="stPopoverBody"] div[data-testid="stFileUploaderDropzone"] button {
+        div[data-testid="stFileUploaderDropzone"] button {
             width: auto;
             min-height: 44px;
-            border-radius: 10px;
+            border-radius: 8px;
             border: 0;
             background: #e5e7eb;
             color: #111827;
             font-size: 0.95rem;
             padding: 0.55rem 1rem;
         }
-        section[data-testid="stPopoverBody"] div[data-testid="stFileUploaderDropzone"] button {
-            font-size: 0;
-        }
-        section[data-testid="stPopoverBody"] div[data-testid="stFileUploaderDropzone"] button::after {
-            content: "Choose Text File";
-            font-size: 0.95rem;
-            font-weight: 650;
-        }
-        section[data-testid="stPopoverBody"] div[data-testid="stFileUploaderDropzone"] button:hover {
+        div[data-testid="stFileUploaderDropzone"] button:hover {
             background: #ffffff;
             color: #111827;
         }
-        section[data-testid="stPopoverBody"] div[data-testid="stFileUploaderDropzone"] small {
+        div[data-testid="stFileUploaderDropzone"] small {
             color: #9ca3af;
+        }
+        div[data-testid="stFileUploader"] {
+            margin-bottom: 0.55rem;
         }
         div[data-testid="stVerticalBlock"] > div:has(> div[data-testid="stAlert"]) {
             margin-top: 0.5rem;
@@ -562,18 +536,17 @@ def main() -> None:
             st.markdown('<div class="small-muted">Sample resume loaded.</div>', unsafe_allow_html=True)
 
     with right:
-        jd_text = st.text_area("Job description", key="jd_text", height=260)
-        with st.popover("+", help="Upload a job description text file"):
-            jd_upload = st.file_uploader(
-                "Drag & Drop your Job Description here",
-                type=["txt", "md"],
-                key="jd_file_upload",
-            )
-            st.caption("Plain .txt and .md files allowed")
-            if st.session_state.get("jd_upload_error"):
-                st.error(st.session_state["jd_upload_error"])
-            elif st.session_state.get("jd_upload_success"):
-                st.success(st.session_state["jd_upload_success"])
+        st.file_uploader(
+            "Job description",
+            type=["txt", "md"],
+            key="jd_file_upload",
+            on_change=_process_pending_jd_upload,
+        )
+        if st.session_state.get("jd_upload_error"):
+            st.error(st.session_state["jd_upload_error"])
+        elif st.session_state.get("jd_upload_success"):
+            st.success(st.session_state["jd_upload_success"])
+        jd_text = st.text_area("Job description text", key="jd_text", height=260)
 
     run = st.button("Run analysis", type="primary")
     if run:
